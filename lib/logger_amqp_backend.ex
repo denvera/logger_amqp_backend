@@ -29,6 +29,26 @@ defmodule LoggerAmqpBackend do
     {:ok, state}
   end
 
+  def handle_info({:connect, amqp_url}, s) do
+    case Connection.open(amqp_url) do
+      {:ok, conn} ->
+        # Get notifications when the connection goes down
+        Process.monitor(conn.pid)
+        {:ok, %{s | amqp_conn: conn}}
+
+      {:error, _} ->
+        #Logger.error("Failed to connect #{@host}. Reconnecting later...")
+        # Retry later
+        Process.send_after(self(), :connect, @reconnect_interval)
+        {:ok, %{s | amqp_conn: nil}}
+    end
+  end
+
+  def handle_info({:DOWN, _, :process, _pid, reason}, _) do
+    # Stop GenServer. Will be restarted by Supervisor.
+    {:stop, {:connection_lost, reason}, nil}
+  end
+
   def handle_info(_, state) do
     {:ok, state}
   end
@@ -123,26 +143,5 @@ defmodule LoggerAmqpBackend do
 
     }
   end
-
-  def handle_info({:connect, amqp_url}, s) do
-    case Connection.open(amqp_url) do
-      {:ok, conn} ->
-        # Get notifications when the connection goes down
-        Process.monitor(conn.pid)
-        {:noreply, %{s | amqp_conn: conn}}
-
-      {:error, _} ->
-        #Logger.error("Failed to connect #{@host}. Reconnecting later...")
-        # Retry later
-        Process.send_after(self(), :connect, @reconnect_interval)
-        {:noreply, %{s | amqp_conn: nil}}
-    end
-  end
-
-  def handle_info({:DOWN, _, :process, _pid, reason}, _) do
-    # Stop GenServer. Will be restarted by Supervisor.
-    {:stop, {:connection_lost, reason}, nil}
-  end
-
 
 end

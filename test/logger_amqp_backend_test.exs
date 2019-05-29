@@ -6,18 +6,21 @@ defmodule LoggerAmqpBackendTest do
   require Logger
 
   @backend {LoggerAmqpBackend, :test}
-  Logger.add_backend @backend
 
   doctest LoggerAmqpBackend
 
   setup_with_mocks([
-    {AMQP.Connection, [], [open: fn _ -> {:ok, "test conn"} end]},
+    {AMQP.Connection, [], [open: &MockConn.open/1]},
     {AMQP.Channel, [], [open: fn _ -> {:ok, "test chan"} end]},
     {AMQP.Basic, [], [publish: fn _, _, _, msg ->
       IO.puts "Publish: #{msg}"
       {:ok,nil}
     end]}
     ]) do
+      {:ok, _} = Logger.add_backend @backend
+      ExUnit.Callbacks.on_exit(fn ->
+        :ok = Logger.remove_backend(@backend)
+      end)
       #IO.puts("Log a message")
       config [amqp_url: "amqp://some.url:2134/vhost", level: :debug]
     :ok
@@ -28,12 +31,26 @@ defmodule LoggerAmqpBackendTest do
     Logger.debug "This is a test message"
     assert_called AMQP.Basic.publish(:_, :_, :_, :_)
   end
-  test "test" do
-    assert true == true
-  end
 
   defp config(opts) do
     Logger.configure_backend(@backend, opts)
   end
 
+
+
+end
+
+defmodule MockConn do
+  defstruct [:pid]
+
+  def open(_) do
+    pid = spawn(fn ->
+      receive do
+        :exit ->
+          IO.puts("Shutdown MockConn")
+      end
+    end
+      )
+    {:ok, %MockConn{pid: pid}}
+  end
 end
