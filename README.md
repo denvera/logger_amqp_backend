@@ -3,8 +3,7 @@
 
 # LoggerAmqpBackend
 
-Elixir Logger backend to send logs to an AMQP broker (eg: RabbitMQ)
-
+Elixir Logger backend to send logs to an AMQP broker (eg: RabbitMQ). Based largely on [logger_file_backend](https://github.com/onkel-dirtus/logger_file_backend).
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed
