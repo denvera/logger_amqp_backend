@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.org/denvera/logger_amqp_backend.svg?branch=master)](https://travis-ci.org/denvera/logger_amqp_backend)
+[![Coverage Status](https://coveralls.io/repos/github/denvera/logger_amqp_backend/badge.svg?branch=master)](https://coveralls.io/github/denvera/logger_amqp_backend?branch=master)
+
 # LoggerAmqpBackend
 
 Elixir Logger backend to send logs to an AMQP broker (eg: RabbitMQ)
