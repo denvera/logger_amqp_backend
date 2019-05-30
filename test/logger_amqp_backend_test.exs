@@ -21,13 +21,11 @@ defmodule LoggerAmqpBackendTest do
       ExUnit.Callbacks.on_exit(fn ->
         :ok = Logger.remove_backend(@backend)
       end)
-      #IO.puts("Log a message")
       config [amqp_url: "amqp://some.url:2134/vhost", level: :debug]
     :ok
   end
 
   test "log a message" do
-    IO.puts("Log a message")
     Logger.debug "This is a test message"
     assert_called AMQP.Basic.publish(:_, :_, :_, :_)
   end
@@ -35,8 +33,6 @@ defmodule LoggerAmqpBackendTest do
   defp config(opts) do
     Logger.configure_backend(@backend, opts)
   end
-
-
 
 end
 
