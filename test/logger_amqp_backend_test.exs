@@ -12,6 +12,7 @@ defmodule LoggerAmqpBackendTest do
   setup_with_mocks([
     {AMQP.Connection, [], [open: &MockConn.open/1]},
     {AMQP.Channel, [], [open: fn _ -> {:ok, "test chan"} end]},
+    {AMQP.Queue, [], [declare: fn _, _, _ -> {:ok, "queue"} end]},
     {AMQP.Basic, [], [publish: fn _, _, _, msg ->
       IO.puts "Publish: #{msg}"
       {:ok,nil}

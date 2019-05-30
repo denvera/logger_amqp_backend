@@ -2,7 +2,22 @@ defmodule LoggerAmqpBackend do
   use AMQP
 
   @behaviour :gen_event
-  @default_state %{name: nil, format: nil, level: nil, metadata: nil, metadata_filter: nil, exchange: "", queue: "logs", amqp_channel: nil, amqp_conn: nil, amqp_url: "", routing_key: ""}
+  @default_state %{
+    name: nil,
+    format: nil,
+    level: nil,
+    metadata: nil,
+    metadata_filter: nil,
+    exchange: "",
+    queue: "logs",
+    amqp_channel: nil,
+    amqp_conn: nil,
+    amqp_url: "",
+    routing_key: "",
+    declare_queue: true,
+    durable: true,
+    queue_args: []
+  }
   @default_format "{\"time\": \"$time $date\", \"level\": \"$level\", \"message\": \"$message\", \"metadata\":\"$metadata\"}"
   @reconnect_interval 10_000
 
@@ -29,12 +44,16 @@ defmodule LoggerAmqpBackend do
     {:ok, state}
   end
 
-  def handle_info({:connect, amqp_url}, s) do
+  def handle_info({:connect, amqp_url}, %{routing_key: routing_key, declare_queue: declare, durable: durable, queue_args: queue_args} = s) do
     case Connection.open(amqp_url) do
       {:ok, conn} ->
         # Get notifications when the connection goes down
         Process.monitor(conn.pid)
-        {:ok, %{s | amqp_conn: conn}}
+        {:ok, chan} = Channel.open(conn)
+        if declare do
+          {:ok, _} = Queue.declare(chan, routing_key, durable: durable, arguments: queue_args)
+        end
+        {:ok, %{s | amqp_conn: conn, amqp_channel: chan}}
 
       {:error, _} ->
         #Logger.error("Failed to connect #{@host}. Reconnecting later...")
@@ -61,10 +80,14 @@ defmodule LoggerAmqpBackend do
   defp log_event(level, msg, ts, md, %{amqp_channel: chan, exchange: exchange, routing_key: routing_key} = state)  do
     output = format_event(level, msg, ts, md, state)
     send_amqp(chan, exchange, routing_key, output)
-
+    {:ok, state}
   end
 
-  defp send_amqp(chan, exchange, routing_key, output) do
+  defp send_amqp(chan, exchange, routing_key, output) when is_list(output) do
+    AMQP.Basic.publish(chan, exchange, routing_key, IO.chardata_to_string(output))
+  end
+
+  defp send_amqp(chan, exchange, routing_key, output) when is_binary(output) do
     AMQP.Basic.publish(chan, exchange, routing_key, output)
   end
 
@@ -109,16 +132,17 @@ defmodule LoggerAmqpBackend do
     opts = Keyword.merge(env, opts)
     Application.put_env(:logger, name, opts)
 
-    level           = Keyword.get(opts, :level)
+    level           = Keyword.get(opts, :level, :info)
     metadata        = Keyword.get(opts, :metadata, [])
     format_opts     = Keyword.get(opts, :format, @default_format)
     format          = Logger.Formatter.compile(format_opts)
     amqp_url        = Keyword.get(opts, :amqp_url)
     metadata_filter = Keyword.get(opts, :metadata_filter)
     durable         = Keyword.get(opts, :durable, true)
-    queue_args      = Keyword.get(opts, :queue_args)
+    declare_queue   = Keyword.get(opts, :declare_queue, true)
+    queue_args      = Keyword.get(opts, :queue_args, [])
     exchange        = Keyword.get(opts, :exchange, "")
-    routing_key     = Keyword.get(opts, :routing_key, name)
+    routing_key     = Keyword.get(opts, :routing_key, Atom.to_string(name))
 
 
     send(self(), {:connect, amqp_url})
@@ -139,7 +163,10 @@ defmodule LoggerAmqpBackend do
       amqp_channel: nil,
       amqp_conn: nil,
       exchange: exchange,
-      routing_key: routing_key
+      routing_key: routing_key,
+      durable: durable,
+      declare_queue: declare_queue,
+      queue_args: queue_args
 
     }
   end
