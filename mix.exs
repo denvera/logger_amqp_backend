@@ -4,7 +4,7 @@ defmodule LoggerAmqpBackend.MixProject do
   def project do
     [
       app: :logger_amqp_backend,
-      version: "0.1.1",
+      version: "0.1.2",
       elixir: "~> 1.8",
       start_permanent: Mix.env() == :prod,
       test_coverage: [tool: ExCoveralls],

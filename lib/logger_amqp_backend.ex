@@ -160,8 +160,6 @@ defmodule LoggerAmqpBackend do
       level: level,
       metadata: metadata,
       metadata_filter: metadata_filter,
-      amqp_channel: nil,
-      amqp_conn: nil,
       exchange: exchange,
       routing_key: routing_key,
       durable: durable,
