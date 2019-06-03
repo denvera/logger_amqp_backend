@@ -38,7 +38,7 @@ defmodule LoggerAmqpBackend.MixProject do
   defp package() do
     [
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/denvera/logger_amqp_backen"}
+      links: %{"GitHub" => "https://github.com/denvera/logger_amqp_backend"}
     ]
   end
 end
