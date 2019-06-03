@@ -137,7 +137,7 @@ defmodule LoggerAmqpBackend do
     format_opts     = Keyword.get(opts, :format, @default_format)
     format          = Logger.Formatter.compile(format_opts)
     amqp_url        = Keyword.get(opts, :amqp_url)
-    metadata_filter = Keyword.get(opts, :metadata_filter)
+    metadata_filter = Keyword.get(opts, :metadata_filter, nil)
     durable         = Keyword.get(opts, :durable, true)
     declare_queue   = Keyword.get(opts, :declare_queue, true)
     queue_args      = Keyword.get(opts, :queue_args, [])
@@ -145,8 +145,8 @@ defmodule LoggerAmqpBackend do
     routing_key     = Keyword.get(opts, :routing_key, Atom.to_string(name))
 
 
-    send(self(), {:connect, amqp_url})
-
+    #send(self(), {:connect, amqp_url})
+    {:ok, state} = handle_info({:connect, amqp_url}, state)
     #{:ok, conn} = Connection.open(amqp_url)
     #{:ok, chan} = Channel.open(conn)
 

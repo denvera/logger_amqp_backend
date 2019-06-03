@@ -15,8 +15,7 @@ defmodule LoggerAmqpBackend.MixProject do
 
   def application do
     [
-      applications: [:logger],
-      extra_applications: [:logger]
+      applications: []
     ]
   end
 
