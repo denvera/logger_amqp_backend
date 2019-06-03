@@ -1,8 +1,6 @@
 defmodule LoggerAmqpBackendTest do
   use ExUnit.Case, async: false
-
   import Mock
-
   require Logger
 
   @backend {LoggerAmqpBackend, :test}
@@ -55,6 +53,25 @@ defmodule LoggerAmqpBackendTest do
     Logger.info "Log a message with metadata filter", [test_meta: true]
     assert_receive(:test_meta_filter, 500)
   end
+
+  test "specifying :all for metadata just includes all metadata" do
+    assert LoggerAmqpBackend.take_metadata([all: :data], :all) == [all: :data]
+  end
+
+  test "receiving a DOWN message stops process" do
+    assert LoggerAmqpBackend.handle_info({:DOWN, :ignored, :process, :pid, "reason"}, :state) == {:stop, {:connection_lost, "reason"}, nil}
+  end
+
+  test_with_mock "publishing a binary works", context, AMQP.Basic, [], [publish: fn _, _, _, msg ->
+    IO.puts "Publish: #{msg} send to #{inspect(context[:pid])}"
+    send(context[:pid], :test_binary_publish)
+    {:ok,nil}
+  end] do
+    LoggerAmqpBackend.send_amqp(nil, nil, nil, "A string")
+    assert_receive(:test_binary_publish, 500)
+  end
+
+  defp config()
 
   defp config(opts) do
     Logger.configure_backend(@backend, opts)

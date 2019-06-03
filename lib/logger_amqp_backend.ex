@@ -1,4 +1,5 @@
 defmodule LoggerAmqpBackend do
+  @compile if Mix.env == :test, do: :export_all
   use AMQP
 
   @behaviour :gen_event
@@ -147,8 +148,6 @@ defmodule LoggerAmqpBackend do
 
     #send(self(), {:connect, amqp_url})
     {:ok, state} = handle_info({:connect, amqp_url}, state)
-    #{:ok, conn} = Connection.open(amqp_url)
-    #{:ok, chan} = Channel.open(conn)
 
     #{:ok, _} = Queue.declare(chan, queue, durable: durable, arguments: args)
     #:ok = Queue.bind(chan, @queue, @exchange)
