@@ -81,7 +81,7 @@ defmodule LoggerAmqpBackendTest do
   end
 
   test_with_mock "publishing a binary works", context, AMQP.Basic, [], [publish: fn _, _, _, msg ->
-    IO.puts "Publish: #{msg} send to #{inspect(context[:pid])}"
+    IO.puts "Publish: #{inspect(msg)} send to #{inspect(context[:pid])}"
     send(context[:pid], :test_binary_publish)
     {:ok,nil}
   end] do
