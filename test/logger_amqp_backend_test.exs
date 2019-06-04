@@ -54,6 +54,24 @@ defmodule LoggerAmqpBackendTest do
     assert_receive(:test_meta_filter, 500)
   end
 
+  test_with_mock "log with metadata filter not matching", context, AMQP.Basic, [], [publish: fn _, _, _, msg ->
+    IO.puts "Publish: #{msg} send to #{inspect(context[:pid])}"
+    send(context[:pid], :test_meta_filter)
+    {:ok,nil}
+  end] do
+    config([amqp_url: "amqp://some.url:2134/vhost", level: :debug, metadata: [:test_meta], metadata_filter: [test_meta: true]])
+    IO.puts "My PID: #{inspect(self())}"
+    Logger.info "Log a message with metadata filter", [something_else: :a_value]
+    refute_receive(:test_meta_filter, 100)
+  end
+
+  test_with_mock "connection failure", context, AMQP.Connection, [], [open: fn _ ->
+    {:error,nil}
+  end] do
+    s = %{routing_key: nil, declare_queue: nil, durable: nil, queue_args: [], amqp_conn: "notnil"}
+    assert LoggerAmqpBackend.handle_info({:connect, "ignored"}, s) == {:ok, %{s | amqp_conn: nil}}
+  end
+
   test "specifying :all for metadata just includes all metadata" do
     assert LoggerAmqpBackend.take_metadata([all: :data], :all) == [all: :data]
   end
