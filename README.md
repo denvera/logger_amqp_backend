@@ -5,6 +5,12 @@
 # LoggerAmqpBackend
 
 Elixir Logger backend to send logs to an AMQP broker (eg: RabbitMQ). Based largely on [logger_file_backend](https://github.com/onkel-dirtus/logger_file_backend).
+`LoggerAmqpBackend` is a custom backend for the elixir :logger application. The `:logger` application should be started prior to using this backend.
+
+
+## Configuration
+
+
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed

@@ -57,7 +57,6 @@ defmodule LoggerAmqpBackend do
         {:ok, %{s | amqp_conn: conn, amqp_channel: chan}}
 
       {:error, _} ->
-        #Logger.error("Failed to connect #{@host}. Reconnecting later...")
         # Retry later
         Process.send_after(self(), :connect, @reconnect_interval)
         {:ok, %{s | amqp_conn: nil}}
@@ -146,11 +145,7 @@ defmodule LoggerAmqpBackend do
     routing_key     = Keyword.get(opts, :routing_key, Atom.to_string(name))
 
 
-    #send(self(), {:connect, amqp_url})
-    {:ok, state} = handle_info({:connect, amqp_url}, state)
-
-    #{:ok, _} = Queue.declare(chan, queue, durable: durable, arguments: args)
-    #:ok = Queue.bind(chan, @queue, @exchange)
+    send(self(), {:connect, amqp_url})
 
     %{state |
       name: name,
