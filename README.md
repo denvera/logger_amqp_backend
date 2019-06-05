@@ -1,6 +1,6 @@
 [![Build Status](https://travis-ci.org/denvera/logger_amqp_backend.svg?branch=master)](https://travis-ci.org/denvera/logger_amqp_backend)
 [![Coverage Status](https://coveralls.io/repos/github/denvera/logger_amqp_backend/badge.png?branch=master)](https://coveralls.io/github/denvera/logger_amqp_backend?branch=master)
-[![hex.pm version](https://img.shields.io/hexpm/v/logger_amqp_backend.svg?style=flat)](https://hex.pm/packages/logger_file_backend)
+[![hex.pm version](https://img.shields.io/hexpm/v/logger_amqp_backend.svg?style=flat)](https://hex.pm/packages/logger_amqp_backend)
 
 # LoggerAmqpBackend
 
