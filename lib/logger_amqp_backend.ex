@@ -17,13 +17,14 @@ defmodule LoggerAmqpBackend do
     routing_key: "",
     declare_queue: true,
     durable: true,
-    queue_args: []
+    queue_args: [],
+    buffered: []
   }
   @default_format "{\"time\": \"$time $date\", \"level\": \"$level\", \"message\": \"$message\", \"metadata\":\"$metadata\"}"
   @reconnect_interval 10_000
 
   def init({__MODULE__, name}) do
-    {:ok, configure(name, [])}
+    handle_info(:connect, configure(name, []))
   end
 
   def handle_call({:configure, opts}, %{name: name} = state) do
@@ -40,12 +41,22 @@ defmodule LoggerAmqpBackend do
     end
   end
 
-  def handle_event(:flush, state) do
-    # We're not buffering anything so this is a no-op
+  def handle_event(:flush, %{amqp_channel: nil} = state) do
     {:ok, state}
   end
 
-  def handle_info({:connect, amqp_url}, %{routing_key: routing_key, declare_queue: declare, durable: durable, queue_args: queue_args} = s) do
+  def handle_event(:flush, %{amqp_channel: chan, exchange: exchange, routing_key: routing_key, buffered: [buffered_msg | rest]} = state) do
+    # We're not buffering anything so this is a no-op
+    send_amqp(chan, exchange, routing_key, buffered_msg)
+    send(self(), :flush) # Continue until buffered is empty
+    {:ok, %{state | buffered: rest}}
+  end
+
+  def handle_event(:flush, %{buffered: []} = state) do
+    {:ok, state}
+  end
+
+  def handle_info(:connect, %{amqp_url: amqp_url, routing_key: routing_key, declare_queue: declare, durable: durable, queue_args: queue_args, buffered: buffered} = s) do
     case Connection.open(amqp_url) do
       {:ok, conn} ->
         # Get notifications when the connection goes down
@@ -54,7 +65,8 @@ defmodule LoggerAmqpBackend do
         if declare do
           {:ok, _} = Queue.declare(chan, routing_key, durable: durable, arguments: queue_args)
         end
-        {:ok, %{s | amqp_conn: conn, amqp_channel: chan}}
+        send(self(), :flush)
+        {:ok, %{s | amqp_conn: conn, amqp_channel: chan, buffered: Enum.reverse(buffered)}}
 
       {:error, _} ->
         # Retry later
@@ -77,10 +89,15 @@ defmodule LoggerAmqpBackend do
     {:ok, state}
   end
 
-  defp log_event(level, msg, ts, md, %{amqp_channel: chan, exchange: exchange, routing_key: routing_key} = state)  do
+  defp log_event(level, msg, ts, md, %{amqp_channel: chan, exchange: exchange, routing_key: routing_key, buffered: buffered} = state)  do
     output = format_event(level, msg, ts, md, state)
-    send_amqp(chan, exchange, routing_key, output)
-    {:ok, state}
+    case chan do
+      nil ->
+        {:ok, %{state | buffered: [output | buffered]}}
+      _ ->
+        send_amqp(chan, exchange, routing_key, output)
+        {:ok, state}
+    end
   end
 
   defp send_amqp(chan, exchange, routing_key, output) when is_list(output) do
@@ -144,9 +161,6 @@ defmodule LoggerAmqpBackend do
     exchange        = Keyword.get(opts, :exchange, "")
     routing_key     = Keyword.get(opts, :routing_key, Atom.to_string(name))
 
-
-    send(self(), {:connect, amqp_url})
-
     %{state |
       name: name,
       amqp_url: amqp_url,
@@ -158,8 +172,7 @@ defmodule LoggerAmqpBackend do
       routing_key: routing_key,
       durable: durable,
       declare_queue: declare_queue,
-      queue_args: queue_args
-
+      queue_args: queue_args,
     }
   end
 

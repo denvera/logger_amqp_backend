@@ -68,8 +68,8 @@ defmodule LoggerAmqpBackendTest do
   test_with_mock "connection failure", context, AMQP.Connection, [], [open: fn _ ->
     {:error,nil}
   end] do
-    s = %{routing_key: nil, declare_queue: nil, durable: nil, queue_args: [], amqp_conn: "notnil"}
-    assert LoggerAmqpBackend.handle_info({:connect, "ignored"}, s) == {:ok, %{s | amqp_conn: nil}}
+    s = %{amqp_url: "ignored", routing_key: nil, declare_queue: nil, durable: nil, queue_args: [], amqp_conn: "notnil", buffered: []}
+    assert LoggerAmqpBackend.handle_info(:connect, s) == {:ok, %{s | amqp_conn: nil}}
   end
 
   test "specifying :all for metadata just includes all metadata" do
@@ -88,8 +88,6 @@ defmodule LoggerAmqpBackendTest do
     LoggerAmqpBackend.send_amqp(nil, nil, nil, "A string")
     assert_receive(:test_binary_publish, 500)
   end
-
-  defp config()
 
   defp config(opts) do
     Logger.configure_backend(@backend, opts)
