@@ -4,7 +4,7 @@ defmodule LoggerAmqpBackend.MixProject do
   def project do
     [
       app: :logger_amqp_backend,
-      version: "0.1.4",
+      version: "0.1.5",
       elixir: "~> 1.8",
       start_permanent: Mix.env() == :prod,
       test_coverage: [tool: ExCoveralls],
@@ -26,6 +26,7 @@ defmodule LoggerAmqpBackend.MixProject do
   defp deps do
     [
       {:amqp, "~> 1.2"},
+      {:jason, "~> 1.2"},
       {:ex_doc, "~> 0.19", only: :dev, runtime: false},
       {:mock, "~> 0.3.0", only: :test},
       {:excoveralls, "~> 0.10", only: :test}

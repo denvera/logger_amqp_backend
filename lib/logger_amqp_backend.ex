@@ -108,6 +108,21 @@ defmodule LoggerAmqpBackend do
     AMQP.Basic.publish(chan, exchange, routing_key, output)
   end
 
+  def format_json(level, msg, ts, md) do
+    {date, time} = ts
+    timestamp = IO.iodata_to_binary([Logger.Formatter.format_date(date), " ", Logger.Formatter.format_time(time)])
+    json_message = %{
+      "level" => level,
+      "message" => msg,
+      "timestamp" => timestamp,
+    }
+    IO.puts("METADATA #{inspect(md)}")
+    Enum.reduce(md, json_message, fn {k, v}, acc ->
+      Map.put(acc, k, v)
+    end)
+    |> Jason.encode!()
+  end
+
   defp format_event(level, msg, ts, md, %{format: format, metadata: keys}) do
     Logger.Formatter.format(format, level, msg, ts, take_metadata(md, keys))
   end
@@ -152,7 +167,12 @@ defmodule LoggerAmqpBackend do
     level           = Keyword.get(opts, :level, :info)
     metadata        = Keyword.get(opts, :metadata, [])
     format_opts     = Keyword.get(opts, :format, @default_format)
-    format          = Logger.Formatter.compile(format_opts)
+    format          = case format_opts do
+      :json ->
+        {__MODULE__, :format_json}
+      fo ->
+        Logger.Formatter.compile(fo)
+    end
     amqp_url        = Keyword.get(opts, :amqp_url)
     metadata_filter = Keyword.get(opts, :metadata_filter, nil)
     durable         = Keyword.get(opts, :durable, true)
