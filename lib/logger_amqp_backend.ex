@@ -1,5 +1,5 @@
 defmodule LoggerAmqpBackend do
-  @compile if Mix.env == :test, do: :export_all
+  @compile if Mix.env() == :test, do: :export_all
   use AMQP
 
   @behaviour :gen_event
@@ -31,10 +31,12 @@ defmodule LoggerAmqpBackend do
     {:ok, :ok, configure(name, opts, state)}
   end
 
-
-
-  def handle_event({level, _gl, {Logger, msg, ts, md}}, %{level: min_level, metadata_filter: metadata_filter} = state) do
-    if (is_nil(min_level) or Logger.compare_levels(level, min_level) != :lt) and metadata_matches?(md, metadata_filter) do
+  def handle_event(
+        {level, _gl, {Logger, msg, ts, md}},
+        %{level: min_level, metadata_filter: metadata_filter} = state
+      ) do
+    if (is_nil(min_level) or Logger.compare_levels(level, min_level) != :lt) and
+         metadata_matches?(md, metadata_filter) do
       log_event(level, msg, ts, md, state)
     else
       {:ok, state}
@@ -45,10 +47,19 @@ defmodule LoggerAmqpBackend do
     {:ok, state}
   end
 
-  def handle_event(:flush, %{amqp_channel: chan, exchange: exchange, routing_key: routing_key, buffered: [buffered_msg | rest]} = state) do
+  def handle_event(
+        :flush,
+        %{
+          amqp_channel: chan,
+          exchange: exchange,
+          routing_key: routing_key,
+          buffered: [buffered_msg | rest]
+        } = state
+      ) do
     # We're not buffering anything so this is a no-op
     send_amqp(chan, exchange, routing_key, buffered_msg)
-    send(self(), :flush) # Continue until buffered is empty
+    # Continue until buffered is empty
+    send(self(), :flush)
     {:ok, %{state | buffered: rest}}
   end
 
@@ -56,15 +67,27 @@ defmodule LoggerAmqpBackend do
     {:ok, state}
   end
 
-  def handle_info(:connect, %{amqp_url: amqp_url, routing_key: routing_key, declare_queue: declare, durable: durable, queue_args: queue_args, buffered: buffered} = s) do
+  def handle_info(
+        :connect,
+        %{
+          amqp_url: amqp_url,
+          routing_key: routing_key,
+          declare_queue: declare,
+          durable: durable,
+          queue_args: queue_args,
+          buffered: buffered
+        } = s
+      ) do
     case Connection.open(amqp_url) do
       {:ok, conn} ->
         # Get notifications when the connection goes down
         Process.monitor(conn.pid)
         {:ok, chan} = Channel.open(conn)
+
         if declare do
           {:ok, _} = Queue.declare(chan, routing_key, durable: durable, arguments: queue_args)
         end
+
         send(self(), :flush)
         {:ok, %{s | amqp_conn: conn, amqp_channel: chan, buffered: Enum.reverse(buffered)}}
 
@@ -89,34 +112,52 @@ defmodule LoggerAmqpBackend do
     {:ok, state}
   end
 
-  defp log_event(level, msg, ts, md, %{amqp_channel: chan, exchange: exchange, routing_key: routing_key, buffered: buffered} = state)  do
+  defp log_event(
+         level,
+         msg,
+         ts,
+         md,
+         %{amqp_channel: chan, exchange: exchange, routing_key: routing_key, buffered: buffered} =
+           state
+       ) do
     output = format_event(level, msg, ts, md, state)
+
     case chan do
       nil ->
         {:ok, %{state | buffered: [output | buffered]}}
+
       _ ->
         send_amqp(chan, exchange, routing_key, output)
         {:ok, state}
     end
   end
 
-  defp send_amqp(chan, exchange, routing_key, output) when is_list(output) do
+  def send_amqp(chan, exchange, routing_key, output) when is_list(output) do
     AMQP.Basic.publish(chan, exchange, routing_key, IO.chardata_to_string(output))
   end
 
-  defp send_amqp(chan, exchange, routing_key, output) when is_binary(output) do
+  def send_amqp(chan, exchange, routing_key, output) when is_binary(output) do
     AMQP.Basic.publish(chan, exchange, routing_key, output)
   end
 
   def format_json(level, msg, ts, md) do
     {date, time} = ts
-    timestamp = IO.iodata_to_binary([Logger.Formatter.format_date(date), " ", Logger.Formatter.format_time(time)])
+
+    timestamp =
+      IO.iodata_to_binary([
+        Logger.Formatter.format_date(date),
+        " ",
+        Logger.Formatter.format_time(time)
+      ])
+
     json_message = %{
       "level" => level,
       "message" => msg,
-      "timestamp" => timestamp,
+      "timestamp" => timestamp
     }
+
     IO.puts("METADATA #{inspect(md)}")
+
     Enum.reduce(md, json_message, fn {k, v}, acc ->
       Map.put(acc, k, v)
     end)
@@ -127,30 +168,33 @@ defmodule LoggerAmqpBackend do
     Logger.Formatter.format(format, level, msg, ts, take_metadata(md, keys))
   end
 
-
   @doc false
-  @spec metadata_matches?(Keyword.t, nil|Keyword.t) :: true|false
+  @spec metadata_matches?(Keyword.t(), nil | Keyword.t()) :: true | false
   def metadata_matches?(_md, nil), do: true
-  def metadata_matches?(_md, []), do: true # all of the filter keys are present
-  def metadata_matches?(md, [{key, val}|rest]) do
+  # all of the filter keys are present
+  def metadata_matches?(_md, []), do: true
+
+  def metadata_matches?(md, [{key, val} | rest]) do
     case Keyword.fetch(md, key) do
       {:ok, ^val} ->
         metadata_matches?(md, rest)
-      _ -> false #fail on first mismatch
+
+      # fail on first mismatch
+      _ ->
+        false
     end
   end
 
+  def take_metadata(metadata, :all), do: metadata
 
-
-  defp take_metadata(metadata, :all), do: metadata
-
-  defp take_metadata(metadata, keys) do
-    metadatas = Enum.reduce(keys, [], fn key, acc ->
-      case Keyword.fetch(metadata, key) do
-        {:ok, val} -> [{key, val} | acc]
-        :error     -> acc
-      end
-    end)
+  def take_metadata(metadata, keys) do
+    metadatas =
+      Enum.reduce(keys, [], fn key, acc ->
+        case Keyword.fetch(metadata, key) do
+          {:ok, val} -> [{key, val} | acc]
+          :error -> acc
+        end
+      end)
 
     Enum.reverse(metadatas)
   end
@@ -164,36 +208,40 @@ defmodule LoggerAmqpBackend do
     opts = Keyword.merge(env, opts)
     Application.put_env(:logger, name, opts)
 
-    level           = Keyword.get(opts, :level, :info)
-    metadata        = Keyword.get(opts, :metadata, [])
-    format_opts     = Keyword.get(opts, :format, @default_format)
-    format          = case format_opts do
-      :json ->
-        {__MODULE__, :format_json}
-      fo ->
-        Logger.Formatter.compile(fo)
-    end
-    amqp_url        = Keyword.get(opts, :amqp_url)
-    metadata_filter = Keyword.get(opts, :metadata_filter, nil)
-    durable         = Keyword.get(opts, :durable, true)
-    declare_queue   = Keyword.get(opts, :declare_queue, true)
-    queue_args      = Keyword.get(opts, :queue_args, [])
-    exchange        = Keyword.get(opts, :exchange, "")
-    routing_key     = Keyword.get(opts, :routing_key, Atom.to_string(name))
+    level = Keyword.get(opts, :level, :info)
+    metadata = Keyword.get(opts, :metadata, [])
+    format_opts = Keyword.get(opts, :format, @default_format)
 
-    %{state |
-      name: name,
-      amqp_url: amqp_url,
-      format: format,
-      level: level,
-      metadata: metadata,
-      metadata_filter: metadata_filter,
-      exchange: exchange,
-      routing_key: routing_key,
-      durable: durable,
-      declare_queue: declare_queue,
-      queue_args: queue_args,
+    format =
+      case format_opts do
+        :json ->
+          {__MODULE__, :format_json}
+
+        fo ->
+          Logger.Formatter.compile(fo)
+      end
+
+    amqp_url = Keyword.get(opts, :amqp_url)
+    metadata_filter = Keyword.get(opts, :metadata_filter, nil)
+    durable = Keyword.get(opts, :durable, true)
+    declare_queue = Keyword.get(opts, :declare_queue, true)
+    queue_args = Keyword.get(opts, :queue_args, [])
+    exchange = Keyword.get(opts, :exchange, "")
+    routing_key = Keyword.get(opts, :routing_key, Atom.to_string(name))
+
+    %{
+      state
+      | name: name,
+        amqp_url: amqp_url,
+        format: format,
+        level: level,
+        metadata: metadata,
+        metadata_filter: metadata_filter,
+        exchange: exchange,
+        routing_key: routing_key,
+        durable: durable,
+        declare_queue: declare_queue,
+        queue_args: queue_args
     }
   end
-
 end
